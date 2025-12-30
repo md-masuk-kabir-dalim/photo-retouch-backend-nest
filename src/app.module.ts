@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-var-requires */
 import { FolderModule } from './folder/folder.module';
 import { Module } from '@nestjs/common';

@@ -1,3 +1,4 @@
+/* eslint-disable prettier/prettier */
 /* eslint-disable prefer-const */
 /* eslint-disable @typescript-eslint/no-var-requires */
 import {
@@ -22,35 +23,32 @@ export class AuthService {
   ) {}
 
   /*************************************** signup ****************************************************/
-  async signup(req) {
+  async signup(req: { email: any; hash: any; password: any }) {
     try {
       const uniqueMail = await this.authModel.findOne({ email: req.email });
       if (!uniqueMail) {
         req.hash = bcrypt.hashSync(req.password, 8);
         delete req.password;
         const user = new this.authModel(req);
-        console.log('user created', user);
         await user.save();
         return user;
       } else {
-        console.log('user already exists');
         throw new NotFoundException('User already exists');
       }
     } catch (error) {
-      throw new NotFoundException(error);
+      throw new NotFoundException(error ?? 'Something went wrong');
     }
   }
+
   /*************************************** signin ****************************************************/
-  async signin(email, password) {
+  async signin(email: string, password: string) {
     try {
       try {
-        const userExist = await await this.authModel.findOne({ email });
+        const userExist = await this.authModel.findOne({ email });
         if (!userExist) {
-          console.log('not exist');
           throw new NotFoundException('User Does not Exist');
         } else {
           if (!bcrypt.compareSync(password, userExist.hash)) {
-            console.log('wrong password');
             throw new NotFoundException('Wrong Password');
           }
           const token = jwt.sign({ email: userExist.email }, 'secret', {
@@ -61,11 +59,9 @@ export class AuthService {
             userExist,
             token,
           };
-          console.log(user);
           return user;
         }
       } catch (error) {
-        console.log('LOGIN ERROR', error);
         if (error.error === 'Not Found') {
           throw new NotFoundException(error.error);
         } else {

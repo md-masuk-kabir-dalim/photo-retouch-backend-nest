@@ -1,3 +1,8 @@
+/* eslint-disable prettier/prettier */
+/* eslint-disable prefer-const */
+/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable no-var */
+/* eslint-disable @typescript-eslint/no-var-requires */
 import {
   BadRequestException,
   HttpException,
@@ -6,13 +11,11 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { json } from 'express';
-import { Model } from 'mongoose';
+import { Document, Model, Types } from 'mongoose';
 import { Analysis } from './analysis.schema';
 import axios from 'axios';
 import * as AWS from 'aws-sdk';
 import { Auth } from 'src/auth/auth.schema';
-
 var FormData = require('form-data');
 const Pusher = require('pusher');
 
@@ -24,14 +27,20 @@ export class AnalysisService {
   ) {}
 
   /*************************** send image for analysis ***************************/
-  async sendAnalysis(files, req): Promise<any> {
+  async sendAnalysis(
+    files: string | any[],
+    req: { uploaded_by: any; filterName: any; filter: string },
+  ): Promise<any> {
     try {
       console.log(req?.uploaded_by);
-      let updateCredits;
+
+      let updateCredits: Document<unknown, any, Auth> &
+        Auth & { _id: Types.ObjectId };
+
       let user = await this.authModel.findById(req?.uploaded_by);
       console.log(user);
 
-      updateCredits = await await this.authModel.findByIdAndUpdate(
+      updateCredits = await this.authModel.findByIdAndUpdate(
         req?.uploaded_by,
         { credits: user?.credits - files.length },
         {
@@ -44,7 +53,8 @@ export class AnalysisService {
       // create mongo document
       console.log('fileData', req);
       let fileData = {};
-      let analysis;
+      let analysis: Document<unknown, any, Analysis> &
+        Analysis & { _id: Types.ObjectId };
       for (let x = 0; x < files.length; x++) {
         let key = 'image' + [x];
         fileData[key] = {
@@ -93,11 +103,12 @@ export class AnalysisService {
       for (let x = 0; x < files.length; x++) {
         formData.append(`image${x}`, files[x]?.buffer, fileName);
         console.log(files[x].buffer);
+        console.log(formData, 'formData');
         if (x === files.length - 1) {
           if (analysis?.filterName === 'smooth') {
             axios({
               method: 'post',
-              url: 'https://retouching.design/bg-server/api/skin_smooth',
+              url: 'http://localhost:5000/api/skin_smooth',
               data: formData,
               maxContentLength: Infinity,
               maxBodyLength: Infinity,
@@ -112,7 +123,7 @@ export class AnalysisService {
           } else if (analysis?.filterName === 'makeup') {
             axios({
               method: 'post',
-              url: 'https://retouching.design/makeup-server/api/apply_makeup',
+              url: 'http://localhost:5000/api/apply_makeup',
               data: formData,
               maxContentLength: Infinity,
               maxBodyLength: Infinity,
@@ -127,7 +138,7 @@ export class AnalysisService {
           } else {
             axios({
               method: 'post',
-              url: 'https://retouching.design/bg-server/api/remove_bg',
+              url: 'http://localhost:5000/api/remove_bg',
               data: formData,
               maxContentLength: Infinity,
               maxBodyLength: Infinity,
@@ -144,19 +155,21 @@ export class AnalysisService {
       }
       console.log('formData', formData);
 
-      // // real time
-
+      // // real time update using pusher
       const pusher = new Pusher({
-        appId: '1492326',
-        key: '7cf840f33e1b0639c69f',
-        secret: '4ab76795d7709d37675c',
-        cluster: 'ap2',
+        appId: '2096730',
+        key: 'b3c9e223ddf49ec5af4b',
+        secret: 'd3de42dcbe6733b2d23e',
+        cluster: 'mt1',
         useTLS: true,
       });
 
       // aws s3
 
-      // console.log(analysis?.images.image1);
+      console.log(
+        analysis?.images.image1,
+        '===============================================================================',
+      );
 
       const s3bucket = new AWS.S3({
         accessKeyId: process.env.ACCESS_KEY,
@@ -202,9 +215,10 @@ export class AnalysisService {
       console.log('error', error);
     }
   }
-  /*************************** get all analysiss of a user ***************************/
-  async getAllAnalysisOfUser(userId): Promise<any> {
-    let analysis;
+
+  /*************************** get all analysis of a user ***************************/
+  async getAllAnalysisOfUser(userId: string): Promise<any> {
+    let analysis: string | any[];
     if (userId.match(/^[0-9a-fA-F]{24}$/)) {
       analysis = await this.analysisModel
         .find({ uploaded_by: userId })
@@ -215,7 +229,7 @@ export class AnalysisService {
     if (analysis.length === 0) {
       throw new NotFoundException('No analysiss found');
     }
-    ////console.log('analysiss', analysiss);
+
     return analysis;
   }
 
@@ -241,7 +255,7 @@ export class AnalysisService {
     let analysis;
     let newAnalysis;
     let name = image.split('/').pop();
-    console.log(image , analysisId)
+    console.log(image, analysisId);
 
     analysis = await this.analysisModel.findOne({ _id: analysisId });
 
@@ -257,12 +271,12 @@ export class AnalysisService {
         },
       );
     }
-    if (Object.keys(analysis?.images).length ===0){
-      console.log(Object.keys(analysis?.images).length)
-      await this.analysisModel.findByIdAndDelete(analysisId)
-      newAnalysis = null
-      console.log('deleted successfully')
-      return null
+    if (Object.keys(analysis?.images).length === 0) {
+      console.log(Object.keys(analysis?.images).length);
+      await this.analysisModel.findByIdAndDelete(analysisId);
+      newAnalysis = null;
+      console.log('deleted successfully');
+      return null;
     }
     return newAnalysis;
     // console.log('analysiss',newAnalysis);
@@ -289,11 +303,15 @@ export class AnalysisService {
         },
       );
     }
-    console.log('deleted successfully',Object.keys(analysis?.images).length , analysis)
+    console.log(
+      'deleted successfully',
+      Object.keys(analysis?.images).length,
+      analysis,
+    );
 
-    if (Object.keys(analysis?.images).length ===0){
-      await this.analysisModel.findByIdAndDelete(image.documentId)
-      console.log('deleted successfully')
+    if (Object.keys(analysis?.images).length === 0) {
+      await this.analysisModel.findByIdAndDelete(image.documentId);
+      console.log('deleted successfully');
     }
     return image;
   }
@@ -324,9 +342,9 @@ export class AnalysisService {
             resolve(newAnalysis);
             arrayAnalysis.push(image);
           }
-          if (Object.keys(analysis?.images).length ===0){
-            await this.analysisModel.findByIdAndDelete(image.documentId)
-            console.log('deleted successfully')
+          if (Object.keys(analysis?.images).length === 0) {
+            await this.analysisModel.findByIdAndDelete(image.documentId);
+            console.log('deleted successfully');
           }
         });
       }),

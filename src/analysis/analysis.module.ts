@@ -1,3 +1,4 @@
+/* eslint-disable prettier/prettier */
 import { AuthSchema } from './../auth/auth.schema';
 import { MongooseModule } from '@nestjs/mongoose';
 import { Module } from '@nestjs/common';
@@ -11,7 +12,6 @@ import { AnalysisService } from './analysis.service';
       { name: 'Analysis', schema: AnalysisSchema },
       { name: 'Auth', schema: AuthSchema },
     ]),
-    
   ],
   controllers: [AnalysisController],
   providers: [AnalysisService],
