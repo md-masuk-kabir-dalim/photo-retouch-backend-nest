@@ -1,0 +1,12 @@
+node_modules
+dist
+.git
+.env
+*.log
+*.zip
+*.tar
+*.mp4
+*.mov
+*.jpg
+*.png
+test
