@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/ban-types */
 /* eslint-disable prettier/prettier */
 /* eslint-disable prefer-const */
 /* eslint-disable @typescript-eslint/no-var-requires */
@@ -9,7 +10,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Document, Model, Types } from 'mongoose';
 import { Auth } from './auth.schema';
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
@@ -75,7 +76,7 @@ export class AuthService {
 
   /*************************************** forget password ****************************************************/
 
-  async forgetPassword(email) {
+  async forgetPassword(email: string) {
     let result = await this.authModel.findOne({ email });
     console.log('email----', result);
     if (Object.keys(result).length == 0) {
@@ -435,7 +436,7 @@ export class AuthService {
   }
 
   /*************************** Update Password ***************************/
-  async updatePassword(email, newPassword) {
+  async updatePassword(email: string, newPassword: string) {
     console.log('params', email, newPassword);
     let user = await this.authModel.findOne({ email });
     console.log(user);
@@ -493,7 +494,7 @@ export class AuthService {
   //   }
   // }
   /*************************************** reset password ****************************************************/
-  async resetPassword(email, pass) {
+  async resetPassword(email: string, pass: string) {
     console.log('email', email, pass);
     const userExist = await this.authModel.findOne({ email }).exec();
     console.log('userExist', userExist);
@@ -522,10 +523,11 @@ export class AuthService {
   }
 
   /*************************************** edit profile****************************************************/
-  async editProfile(userId, userData) {
+  async editProfile(userId: String, userData: { password: any }) {
     console.log(userId, userData);
-    let updatedUser;
-    let response;
+    let updatedUser: Document<unknown, any, Auth> &
+      Auth & { _id: Types.ObjectId; _doc: any };
+    let response: Document<unknown, any, Auth> & Auth & { _id: Types.ObjectId };
     try {
       updatedUser = await this.authModel.findById(userId);
     } catch (err) {
@@ -577,7 +579,7 @@ export class AuthService {
   }
 
   /*************************************** delete user ****************************************************/
-  async deleteUser(userId) {
+  async deleteUser(userId: string) {
     if (userId.match(/^[0-9a-fA-F]{24}$/)) {
       const userExists = await this.authModel.findById(userId).exec();
       console.log('user found', userExists);

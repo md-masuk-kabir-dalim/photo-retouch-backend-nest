@@ -38,7 +38,17 @@ export class AnalysisService {
         Auth & { _id: Types.ObjectId };
 
       let user = await this.authModel.findById(req?.uploaded_by);
-      console.log(user);
+      if (!user) throw new Error('User not found');
+      const filesCount = files.length;
+      const currentCredits = Number(user?.credits ?? 0);
+
+      if (!Number.isFinite(currentCredits)) {
+        throw new Error('Invalid user credits');
+      }
+
+      if (currentCredits < filesCount) {
+        throw new Error('Not enough credits');
+      }
 
       updateCredits = await this.authModel.findByIdAndUpdate(
         req?.uploaded_by,
@@ -108,7 +118,7 @@ export class AnalysisService {
           if (analysis?.filterName === 'smooth') {
             axios({
               method: 'post',
-              url: 'http://localhost:5000/api/skin_smooth',
+              url: 'http://localhost:5001/api/skin_smooth',
               data: formData,
               maxContentLength: Infinity,
               maxBodyLength: Infinity,
@@ -123,7 +133,7 @@ export class AnalysisService {
           } else if (analysis?.filterName === 'makeup') {
             axios({
               method: 'post',
-              url: 'http://localhost:5000/api/apply_makeup',
+              url: 'http://localhost:5001/api/apply_makeup',
               data: formData,
               maxContentLength: Infinity,
               maxBodyLength: Infinity,
@@ -138,7 +148,7 @@ export class AnalysisService {
           } else {
             axios({
               method: 'post',
-              url: 'http://localhost:5000/api/remove_bg',
+              url: 'http://localhost:5001/api/remove_bg',
               data: formData,
               maxContentLength: Infinity,
               maxBodyLength: Infinity,
@@ -172,9 +182,12 @@ export class AnalysisService {
       );
 
       const s3bucket = new AWS.S3({
-        accessKeyId: process.env.ACCESS_KEY,
-        secretAccessKey: process.env.SECRET_ACCESS_KEY,
+        accessKeyId: 'DO00YKMDAUT7JANEJQAP',
+        secretAccessKey: 'K1u9s0taip8HSNZTNKqMKWgwAN7xVC0Afhp7hN3+C68',
+        endpoint: 'https://blr1.digitaloceanspaces.com', // full endpoint for your region
+        region: 'blr1', // optional, can match the endpoint
         signatureVersion: 'v4',
+        s3ForcePathStyle: true,
       });
 
       // files.forEach(file => {
@@ -182,7 +195,7 @@ export class AnalysisService {
         s3bucket.createBucket(() => {
           // console.log('files', files[x]);
           const params = {
-            Bucket: `photo-retouch/User_${analysis?.uploaded_by}/Doc_${analysis?._id}`,
+            Bucket: `dinmajur/User_${analysis?.uploaded_by}/Doc_${analysis?._id}`,
             Key: files[x].fieldname,
             Body: files[x].buffer,
             ACL: 'public-read',
@@ -207,6 +220,7 @@ export class AnalysisService {
           });
         });
       }
+      console.log(analysis, '=================analysis===================');
       return {
         analysis: analysis,
         updateCredits: updateCredits,
