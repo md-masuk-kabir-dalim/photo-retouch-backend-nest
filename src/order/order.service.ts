@@ -1,6 +1,7 @@
+/* eslint-disable prettier/prettier */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable prefer-const */
-/* eslint-disable prettier/prettier */
+
 import {
   BadRequestException,
   HttpException,

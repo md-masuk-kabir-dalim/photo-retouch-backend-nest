@@ -1,3 +1,4 @@
+/* eslint-disable prettier/prettier */
 import { ShopSchema } from './shop.schema';
 import { MongooseModule } from '@nestjs/mongoose';
 import { Module } from '@nestjs/common';

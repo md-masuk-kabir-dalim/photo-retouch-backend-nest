@@ -1,5 +1,7 @@
-/* eslint-disable prefer-const */
 /* eslint-disable prettier/prettier */
+/* eslint-disable @typescript-eslint/ban-types */
+/* eslint-disable prefer-const */
+
 import {
   BadRequestException,
   HttpException,
@@ -21,7 +23,7 @@ export class MeasurementService {
     @InjectModel('Shop') private readonly shopModel: Model<Shop>, // @InjectModel('Services') private readonly servicesModel: Model<Services>,
   ) {}
   /*************************** create a folder ***************************/
-  async createMeasurement(req): Promise<any> {
+  async createMeasurement(req: { shop: any }): Promise<any> {
     let shop;
     shop = await this.shopModel.findOne({ name: req.shop });
     // let services
@@ -45,7 +47,7 @@ export class MeasurementService {
     return measurement;
   }
 
-  async updateMeasurement(measurementId, measurementData) {
+  async updateMeasurement(measurementId: String, measurementData: any) {
     let updatedMeasurement;
     let response;
     try {

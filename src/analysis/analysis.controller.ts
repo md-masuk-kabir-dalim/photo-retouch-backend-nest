@@ -1,6 +1,7 @@
+/* eslint-disable prettier/prettier */
 /* eslint-disable @typescript-eslint/ban-types */
 /* eslint-disable @typescript-eslint/no-unused-vars */
-/* eslint-disable prettier/prettier */
+
 import {
   Controller,
   Get,
@@ -27,7 +28,6 @@ export class AnalysisController {
   }
 
   @Get('/getAllAnalysisOfUser/:id')
-
   async getAllAnalysisOfUser(@Param('id') userId: string) {
     const result = await this.analysisService.getAllAnalysisOfUser(userId);
     return result;

@@ -1,3 +1,4 @@
+/* eslint-disable prettier/prettier */
 import { AuthSchema } from './../auth/auth.schema';
 import { OrgSchema } from './../organization/organization.schema';
 import { MongooseModule } from '@nestjs/mongoose';
