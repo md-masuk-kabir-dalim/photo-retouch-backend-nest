@@ -1,4 +1,5 @@
 /* eslint-disable prettier/prettier */
+/* eslint-disable @typescript-eslint/ban-types */
 /* eslint-disable prefer-const */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable no-var */
@@ -8,14 +9,16 @@ import {
   HttpException,
   HttpStatus,
   Injectable,
+  InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Document, Model, Types } from 'mongoose';
+import { Document, Model, Types, UpdateQuery } from 'mongoose';
 import { Analysis } from './analysis.schema';
 import axios from 'axios';
 import * as AWS from 'aws-sdk';
 import { Auth } from 'src/auth/auth.schema';
+import { envConfig } from 'src/config/env.config';
 var FormData = require('form-data');
 const Pusher = require('pusher');
 
@@ -32,22 +35,20 @@ export class AnalysisService {
     req: { uploaded_by: any; filterName: any; filter: string },
   ): Promise<any> {
     try {
-      console.log(req?.uploaded_by);
-
       let updateCredits: Document<unknown, any, Auth> &
         Auth & { _id: Types.ObjectId };
 
       let user = await this.authModel.findById(req?.uploaded_by);
-      if (!user) throw new Error('User not found');
+      if (!user) throw new NotFoundException('User not found');
       const filesCount = files.length;
       const currentCredits = Number(user?.credits ?? 0);
 
       if (!Number.isFinite(currentCredits)) {
-        throw new Error('Invalid user credits');
+        throw new NotFoundException('Invalid user credits');
       }
 
       if (currentCredits < filesCount) {
-        throw new Error('Not enough credits');
+        throw new BadRequestException('Not enough credits');
       }
 
       updateCredits = await this.authModel.findByIdAndUpdate(
@@ -60,8 +61,6 @@ export class AnalysisService {
         },
       );
 
-      // create mongo document
-      console.log('fileData', req);
       let fileData = {};
       let analysis: Document<unknown, any, Analysis> &
         Analysis & { _id: Types.ObjectId };
@@ -84,28 +83,17 @@ export class AnalysisService {
 
       // makeup filter to blob conversion
 
-      // ai api hit
-
       let formData = new FormData();
-      console.log('-->', analysis);
       let fileName = 'image';
       formData.append('_id', analysis?._id.toString());
       formData.append('id', analysis?.uploaded_by.toString());
       formData.append('count', files.length.toString());
       if (analysis?.filterName === 'makeup') {
         if (req?.filter) {
-          console.log('makeup', req?.filter);
-
-          // var request = require('request').defaults({ encoding: null });
-          // request.get(req?.filter, function (err, res, body) {
-          //   formData.append('makeup', body, fileName);
-          //   console.log('makeup ==> ', body);
-          // });
           const response = await axios.get(req?.filter, {
             responseType: 'arraybuffer',
           });
           const buffer = Buffer.from(response.data, 'utf-8');
-          console.log('==>', buffer);
           formData.append('makeup', buffer, fileName);
         }
       }
@@ -118,32 +106,34 @@ export class AnalysisService {
           if (analysis?.filterName === 'smooth') {
             axios({
               method: 'post',
-              url: 'http://localhost:5001/api/skin_smooth',
+              url: `${envConfig.url.skin_bg_base_api}/skin_smooth`,
               data: formData,
               maxContentLength: Infinity,
               maxBodyLength: Infinity,
               headers: formData.getHeaders(),
             })
               .then(function (response) {
-                console.log(response);
+                return response;
               })
               .catch(function (error) {
-                console.log(error);
+                if (error instanceof HttpException) throw error;
+                throw new InternalServerErrorException('Something went wrong');
               });
           } else if (analysis?.filterName === 'makeup') {
             axios({
               method: 'post',
-              url: 'http://localhost:5001/api/apply_makeup',
+              url: `${envConfig.url.makeup_base_api}/apply_makeup`,
               data: formData,
               maxContentLength: Infinity,
               maxBodyLength: Infinity,
               headers: formData.getHeaders(),
             })
               .then(function (response) {
-                console.log(response);
+                return response;
               })
               .catch(function (error) {
-                console.log(error);
+                if (error instanceof HttpException) throw error;
+                throw new InternalServerErrorException('Something went wrong');
               });
           } else {
             axios({
@@ -155,78 +145,73 @@ export class AnalysisService {
               headers: formData.getHeaders(),
             })
               .then(function (response) {
-                console.log(response);
+                return response;
               })
               .catch(function (error) {
-                console.log(error);
+                if (error instanceof HttpException) throw error;
+                throw new InternalServerErrorException('Something went wrong');
               });
           }
         }
       }
-      console.log('formData', formData);
 
       // // real time update using pusher
       const pusher = new Pusher({
-        appId: '2096730',
-        key: 'b3c9e223ddf49ec5af4b',
-        secret: 'd3de42dcbe6733b2d23e',
-        cluster: 'mt1',
+        appId: envConfig.pusher.appId,
+        key: envConfig.pusher.key,
+        secret: envConfig?.pusher.secret,
+        cluster: envConfig.pusher.cluster,
         useTLS: true,
       });
 
-      // aws s3
-
-      console.log(
-        analysis?.images.image1,
-        '===============================================================================',
-      );
-
       const s3bucket = new AWS.S3({
-        accessKeyId: 'DO00YKMDAUT7JANEJQAP',
-        secretAccessKey: 'K1u9s0taip8HSNZTNKqMKWgwAN7xVC0Afhp7hN3+C68',
-        endpoint: 'https://blr1.digitaloceanspaces.com', // full endpoint for your region
-        region: 'blr1', // optional, can match the endpoint
+        accessKeyId: envConfig.aws.aws_access_key_id,
+        secretAccessKey: envConfig.aws.aws_secret_access_key,
+        endpoint: envConfig.aws.AWS_ENDPOINT,
+        region: envConfig.aws.aws_region,
         signatureVersion: 'v4',
         s3ForcePathStyle: true,
       });
 
-      // files.forEach(file => {
       for (let x = 0; x < files.length; x++) {
         s3bucket.createBucket(() => {
-          // console.log('files', files[x]);
           const params = {
-            Bucket: `dinmajur/User_${analysis?.uploaded_by}/Doc_${analysis?._id}`,
+            Bucket: `${envConfig.aws.aws_bucket_name}/User_${analysis?.uploaded_by}/Doc_${analysis?._id}`,
             Key: files[x].fieldname,
             Body: files[x].buffer,
             ACL: 'public-read',
             ContentType: files[x].type,
           };
-          s3bucket.upload(params, async (err, fileData) => {
-            const a = `images.image${x}.original`;
-            const b = `images.image${x}.status`;
-            const res = await this.analysisModel.findByIdAndUpdate(
-              analysis._id,
-              { $set: { [a]: fileData?.Location } },
-              // { $set: { [a]: fileData?.Location, [b]: 'processing' } },
-            );
+          s3bucket.upload(
+            params,
+            async (err: any, fileData: { Location: any }) => {
+              const a = `images.image${x}.original`;
+              const b = `images.image${x}.status`;
+              const res = await this.analysisModel.findByIdAndUpdate(
+                analysis._id,
+                { $set: { [a]: fileData?.Location } },
+              );
 
-            pusher.trigger('my-channel', 'my-event', {
-              message: res,
-            });
-            // console.log('Success', res);
-            if (err) {
-              return console.log('Error in callback: ', err);
-            }
-          });
+              pusher.trigger('my-channel', 'my-event', {
+                message: res,
+              });
+
+              if (err) {
+                if (err instanceof HttpException) throw err;
+                throw new InternalServerErrorException('Something went wrong');
+              }
+            },
+          );
         });
       }
-      console.log(analysis, '=================analysis===================');
+
       return {
         analysis: analysis,
         updateCredits: updateCredits,
       };
     } catch (error) {
-      console.log('error', error);
+      if (error instanceof HttpException) throw error;
+      throw new InternalServerErrorException('Something went wrong');
     }
   }
 
@@ -247,9 +232,10 @@ export class AnalysisService {
     return analysis;
   }
 
-  /*************************** get single analysiss  ***************************/
-  async getSingleAnalysis(analysisId): Promise<any> {
-    let analysis;
+  /*************************** get single analysis  ***************************/
+  async getSingleAnalysis(analysisId: string): Promise<any> {
+    let analysis:
+      | Document<unknown, any, Analysis> & Analysis & { _id: Types.ObjectId };
     if (analysisId.match(/^[0-9a-fA-F]{24}$/)) {
       analysis = await this.analysisModel
         .findOne({ _id: analysisId })
@@ -257,19 +243,27 @@ export class AnalysisService {
     } else {
       throw new BadRequestException('Invalid analysis id');
     }
-    if (analysis.length === 0) {
+    if (!analysis) {
       throw new NotFoundException('No analysis found');
     }
-    ////console.log('analysiss', analysiss);
+
     return analysis;
   }
 
   /*************************** delete single image  ***************************/
-  async deleteImage(analysisId, image): Promise<any> {
-    let analysis;
-    let newAnalysis;
-    let name = image.split('/').pop();
+  async deleteImage(analysisId: String, image: string | String): Promise<any> {
     console.log(image, analysisId);
+
+    if (!analysisId || !image) {
+      throw new BadRequestException('analysisId and image are required');
+    }
+
+    let analysis:
+      | (Document<unknown, any, Analysis> & Analysis & { _id: Types.ObjectId })
+      | UpdateQuery<Analysis>;
+    let newAnalysis: Document<unknown, any, Analysis> &
+      Analysis & { _id: Types.ObjectId };
+    let name = image.split('/').pop();
 
     analysis = await this.analysisModel.findOne({ _id: analysisId });
 
@@ -286,83 +280,76 @@ export class AnalysisService {
       );
     }
     if (Object.keys(analysis?.images).length === 0) {
-      console.log(Object.keys(analysis?.images).length);
       await this.analysisModel.findByIdAndDelete(analysisId);
       newAnalysis = null;
-      console.log('deleted successfully');
+
       return null;
     }
     return newAnalysis;
-    // console.log('analysiss',newAnalysis);
   }
 
   /*************************** delete single image from all images ***************************/
-  async deleteFromAllAnalysis(image): Promise<any> {
-    let analysis;
-    let newAnalysis;
-    let name = image?.original.split('/').pop();
+  async deleteFromAllAnalysis(image: {
+    documentId: string;
+    imageKey: string;
+  }): Promise<any> {
+    const analysis = await this.analysisModel.findById(image.documentId);
 
-    console.log('image: ' + image);
-
-    analysis = await this.analysisModel.findOne({ _id: image.documentId });
-    if (analysis) {
-      delete analysis?.images?.[name];
-      newAnalysis = await this.analysisModel.findByIdAndUpdate(
-        image.documentId,
-        analysis,
-        {
-          new: true,
-          upsert: true,
-          setDefaultsOnInsert: true,
-        },
-      );
+    if (!analysis) {
+      throw new NotFoundException('Analysis not found');
     }
-    console.log(
-      'deleted successfully',
-      Object.keys(analysis?.images).length,
-      analysis,
+
+    if (!analysis.images?.[image.imageKey]) {
+      throw new BadRequestException('Image key not found in analysis');
+    }
+
+    await this.analysisModel.findByIdAndUpdate(
+      image.documentId,
+      {
+        $unset: { [`images.${image.imageKey}`]: '' },
+      },
+      { new: true },
     );
 
-    if (Object.keys(analysis?.images).length === 0) {
+    const updated = await this.analysisModel.findById(image.documentId);
+
+    if (!updated || Object.keys(updated.images || {}).length === 0) {
       await this.analysisModel.findByIdAndDelete(image.documentId);
-      console.log('deleted successfully');
     }
-    return image;
+
+    return { success: true };
   }
 
-  async deleteMultipleAnalysis(images): Promise<any> {
-    let analysis;
-    let newAnalysis;
-    let arrayAnalysis = [];
-    console.log('images', images);
+  async deleteMultipleAnalysis(
+    images: { documentId: string; imageKey: string }[],
+  ): Promise<any> {
+    const deletedImages = [];
+
     await Promise.all(
-      images.map(async (image) => {
-        arrayAnalysis.push['deleted'];
-        let name = image?.original.split('/').pop();
-        console.log('name', name);
-        analysis = await this.analysisModel.findOne({ _id: image.documentId });
-        return new Promise(async (resolve, reject) => {
-          if (analysis) {
-            delete analysis?.images?.[name];
-            newAnalysis = await this.analysisModel.findByIdAndUpdate(
-              image.documentId,
-              analysis,
-              {
-                new: true,
-                upsert: true,
-                setDefaultsOnInsert: true,
-              },
-            );
-            resolve(newAnalysis);
-            arrayAnalysis.push(image);
-          }
-          if (Object.keys(analysis?.images).length === 0) {
-            await this.analysisModel.findByIdAndDelete(image.documentId);
-            console.log('deleted successfully');
-          }
-        });
+      images.map(async ({ documentId, imageKey }) => {
+        const analysis = await this.analysisModel.findById(documentId);
+        if (!analysis) return;
+
+        if (!analysis.images?.[imageKey]) return;
+
+        await this.analysisModel.updateOne(
+          { _id: documentId },
+          { $unset: { [`images.${imageKey}`]: '' } },
+        );
+
+        deletedImages.push({ documentId, imageKey });
+
+        const updated = await this.analysisModel.findById(documentId);
+
+        if (!updated || Object.keys(updated.images || {}).length === 0) {
+          await this.analysisModel.findByIdAndDelete(documentId);
+        }
       }),
     );
-    return arrayAnalysis;
+
+    return {
+      deletedCount: deletedImages.length,
+      deletedImages,
+    };
   }
 }

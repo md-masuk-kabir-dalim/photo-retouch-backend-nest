@@ -49,7 +49,9 @@ export class AnalysisController {
   }
 
   @Post('/deleteFromAllAnalysis')
-  async deleteFromAllAnalysis(@Body('image') image: String) {
+  async deleteFromAllAnalysis(
+    @Body('image') image: { documentId: string; imageKey: string },
+  ) {
     const result = await this.analysisService.deleteFromAllAnalysis(image);
     return result;
   }
@@ -60,35 +62,4 @@ export class AnalysisController {
     console.log(result);
     return result;
   }
-
-  // @Get('/getAllAnalysissOfOrganization/:id')
-  // async getAllAnalysissOfOrganization(@Param('id') organization: string ) {
-  //   const result = await this.analysisService.getAllAnalysissOfOrganization(organization);
-  //   return result;
-  // }
-  // @Delete('/deleteAnalysis/:id')
-  // async deleteAnalysis(@Param('id') analysisId: string) {
-  //   return await this.analysisService.deleteAnalysis(analysisId);
-  // }
-  // @Patch('/nanoNetApi')
-  // async nanoNetApi(@Body() ids: any): Promise<any> {
-  //   try {
-  //     const num = await this.analysisService.nanoNetApi(ids);
-  //     // console.log('num', num);
-  //     return num
-  //   } catch (error) {
-  //     console.log('errorr in controller', error);
-  //     return error
-  //   }
-  // }
-  // @Post('/getAllAnalysissOfFolderIds')
-  // async getAllAnalysissOfFolderIds(@Body("ids") ids: Array<string> ) {
-  //   return await this.analysisService.getAllAnalysissOfMultipleFolderIds(ids);
-  // }
-
-  // @Get('/getAllAnalysissOfApp')
-  // async getAllAnalysissOfApp() {
-  //   const result = await this.analysisService.getAllAnalysissOfApp();
-  //   return result;
-  // }
 }
