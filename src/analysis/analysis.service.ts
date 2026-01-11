@@ -31,187 +31,134 @@ export class AnalysisService {
 
   /*************************** send image for analysis ***************************/
   async sendAnalysis(
-    files: string | any[],
+    files: any[],
     req: { uploaded_by: any; filterName: any; filter: string },
   ): Promise<any> {
     try {
-      let updateCredits: Document<unknown, any, Auth> &
-        Auth & { _id: Types.ObjectId };
-
-      let user = await this.authModel.findById(req?.uploaded_by);
+      /***************  USER + CREDIT CHECK ***************/
+      const user = await this.authModel.findById(req.uploaded_by);
       if (!user) throw new NotFoundException('User not found');
-      const filesCount = files.length;
-      const currentCredits = Number(user?.credits ?? 0);
 
-      if (!Number.isFinite(currentCredits)) {
-        throw new NotFoundException('Invalid user credits');
-      }
-
-      if (currentCredits < filesCount) {
+      if (user.credits < files.length) {
         throw new BadRequestException('Not enough credits');
       }
 
-      updateCredits = await this.authModel.findByIdAndUpdate(
-        req?.uploaded_by,
-        { credits: user?.credits - files.length },
-        {
-          new: true,
-          upsert: true,
-          setDefaultsOnInsert: true,
-        },
+      const updateCredits = await this.authModel.findByIdAndUpdate(
+        req.uploaded_by,
+        { credits: user.credits - files.length },
+        { new: true },
       );
 
-      let fileData = {};
-      let analysis: Document<unknown, any, Analysis> &
-        Analysis & { _id: Types.ObjectId };
-      for (let x = 0; x < files.length; x++) {
-        let key = 'image' + [x];
-        fileData[key] = {
-          result: '',
+      /***************  CREATE ANALYSIS DOC ***************/
+      const images: any = {};
+      files.forEach((_, i) => {
+        images[`image${i}`] = {
           original: '',
+          result: '',
           status: 'processing',
         };
-        if (x === files.length - 1) {
-          const newAnalysis = new this.analysisModel({
-            images: fileData,
-            uploaded_by: req?.uploaded_by,
-            filterName: req?.filterName,
-          });
-          analysis = await newAnalysis.save();
-        }
-      }
+      });
 
-      // makeup filter to blob conversion
+      const analysis = await new this.analysisModel({
+        images,
+        uploaded_by: req.uploaded_by,
+        filterName: req.filterName,
+      }).save();
 
-      let formData = new FormData();
-      let fileName = 'image';
-      formData.append('_id', analysis?._id.toString());
-      formData.append('id', analysis?.uploaded_by.toString());
-      formData.append('count', files.length.toString());
-      if (analysis?.filterName === 'makeup') {
-        if (req?.filter) {
-          const response = await axios.get(req?.filter, {
-            responseType: 'arraybuffer',
-          });
-          const buffer = Buffer.from(response.data, 'utf-8');
-          formData.append('makeup', buffer, fileName);
-        }
-      }
-
-      for (let x = 0; x < files.length; x++) {
-        formData.append(`image${x}`, files[x]?.buffer, fileName);
-        console.log(files[x].buffer);
-        console.log(formData, 'formData');
-        if (x === files.length - 1) {
-          if (analysis?.filterName === 'smooth') {
-            axios({
-              method: 'post',
-              url: `${envConfig.url.skin_bg_base_api}/skin_smooth`,
-              data: formData,
-              maxContentLength: Infinity,
-              maxBodyLength: Infinity,
-              headers: formData.getHeaders(),
-            })
-              .then(function (response) {
-                return response;
-              })
-              .catch(function (error) {
-                if (error instanceof HttpException) throw error;
-                throw new InternalServerErrorException('Something went wrong');
-              });
-          } else if (analysis?.filterName === 'makeup') {
-            axios({
-              method: 'post',
-              url: `${envConfig.url.makeup_base_api}/apply_makeup`,
-              data: formData,
-              maxContentLength: Infinity,
-              maxBodyLength: Infinity,
-              headers: formData.getHeaders(),
-            })
-              .then(function (response) {
-                return response;
-              })
-              .catch(function (error) {
-                if (error instanceof HttpException) throw error;
-                throw new InternalServerErrorException('Something went wrong');
-              });
-          } else {
-            axios({
-              method: 'post',
-              url: 'http://localhost:5001/api/remove_bg',
-              data: formData,
-              maxContentLength: Infinity,
-              maxBodyLength: Infinity,
-              headers: formData.getHeaders(),
-            })
-              .then(function (response) {
-                return response;
-              })
-              .catch(function (error) {
-                if (error instanceof HttpException) throw error;
-                throw new InternalServerErrorException('Something went wrong');
-              });
-          }
-        }
-      }
-
-      // // real time update using pusher
+      /***************  PUSHER INIT ***************/
       const pusher = new Pusher({
         appId: envConfig.pusher.appId,
         key: envConfig.pusher.key,
-        secret: envConfig?.pusher.secret,
+        secret: envConfig.pusher.secret,
         cluster: envConfig.pusher.cluster,
-        useTLS: true,
+        useTLS: envConfig.pusher.useTLS,
       });
 
-      const s3bucket = new AWS.S3({
+      /***************  S3 / DO SPACES INIT ***************/
+      const s3 = new AWS.S3({
         accessKeyId: envConfig.aws.aws_access_key_id,
         secretAccessKey: envConfig.aws.aws_secret_access_key,
         endpoint: envConfig.aws.AWS_ENDPOINT,
         region: envConfig.aws.aws_region,
-        signatureVersion: 'v4',
         s3ForcePathStyle: true,
+        signatureVersion: 'v4',
       });
 
-      for (let x = 0; x < files.length; x++) {
-        s3bucket.createBucket(() => {
-          const params = {
-            Bucket: `${envConfig.aws.aws_bucket_name}/User_${analysis?.uploaded_by}/Doc_${analysis?._id}`,
-            Key: files[x].fieldname,
-            Body: files[x].buffer,
+      /***************  UPLOAD ORIGINAL IMAGES FIRST ***************/
+      for (let i = 0; i < files.length; i++) {
+        const uploadResult = await s3
+          .upload({
+            Bucket: `${envConfig.aws.aws_bucket_name}/User_${analysis.uploaded_by}/Doc_${analysis._id}`,
+            Key: `original_${i}_${Date.now()}`,
+            Body: files[i].buffer,
             ACL: 'public-read',
-            ContentType: files[x].type,
-          };
-          s3bucket.upload(
-            params,
-            async (err: any, fileData: { Location: any }) => {
-              const a = `images.image${x}.original`;
-              const b = `images.image${x}.status`;
-              const res = await this.analysisModel.findByIdAndUpdate(
-                analysis._id,
-                { $set: { [a]: fileData?.Location } },
-              );
+            ContentType: files[i].mimetype,
+          })
+          .promise();
 
-              pusher.trigger('my-channel', 'my-event', {
-                message: res,
-              });
+        const originalPath = `images.image${i}.original`;
 
-              if (err) {
-                if (err instanceof HttpException) throw err;
-                throw new InternalServerErrorException('Something went wrong');
-              }
-            },
-          );
+        await this.analysisModel.findByIdAndUpdate(analysis._id, {
+          $set: {
+            [originalPath]: uploadResult.Location,
+          },
+        });
+
+        // realtime update
+        pusher.trigger('my-channel', 'my-event', {
+          type: 'ORIGINAL_UPLOADED',
+          index: i,
+          original: uploadResult.Location,
         });
       }
 
+      /***************  PREPARE FORM DATA FOR AI ***************/
+      const formData = new FormData();
+      formData.append('_id', analysis._id.toString());
+      formData.append('id', analysis.uploaded_by.toString());
+      formData.append('count', files.length.toString());
+
+      if (analysis.filterName === 'makeup' && req.filter) {
+        const response = await axios.get(req.filter, {
+          responseType: 'arraybuffer',
+        });
+        formData.append('makeup', Buffer.from(response.data), 'makeup.png');
+      }
+
+      files.forEach((file: { buffer: any; originalname: any }, i: any) => {
+        formData.append(`image${i}`, file.buffer, file.originalname);
+      });
+
+      /***************  FIRE AI API (NO AWAIT) ***************/
+      const API_MAP = {
+        smooth: `${envConfig.url.skin_bg_base_api}/skin_smooth`,
+        makeup: `${envConfig.url.makeup_base_api}/apply_makeup`,
+        remove_bg: `${envConfig.url.skin_bg_base_api}/remove_bg`,
+      };
+
+      const apiUrl = API_MAP[analysis.filterName] || API_MAP.remove_bg;
+
+      axios
+        .post(apiUrl, formData, {
+          headers: formData.getHeaders(),
+          maxBodyLength: Infinity,
+          maxContentLength: Infinity,
+        })
+        .then(() => {
+          console.log('AI processing started');
+        })
+        .catch((err) => {
+          console.error('AI API failed:', err.message);
+        });
+
+      /*************** FINAL RESPONSE ***************/
       return {
         analysis: analysis,
-        updateCredits: updateCredits,
+        updateCredits,
+        message: 'Original images uploaded & AI processing started',
       };
     } catch (error) {
-      if (error instanceof HttpException) throw error;
-      throw new InternalServerErrorException('Something went wrong');
+      throw new InternalServerErrorException('Send analysis failed');
     }
   }
 
