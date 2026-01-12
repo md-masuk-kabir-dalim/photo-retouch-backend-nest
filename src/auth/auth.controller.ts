@@ -60,6 +60,16 @@ export class AuthController {
     return result;
   }
 
+  @Patch('updateProfileImage')
+  @UseInterceptors(FileInterceptor('file'))
+  async updateProfileImage(
+    @UploadedFile() file: Express.Multer.File,
+    @Body('userId') userId: string,
+  ) {
+    const result = await this.authService.updateProfileImage(userId, file);
+    return result;
+  }
+
   @Post('resetPassword')
   async resetPassword(
     @Body('email') email: string,
@@ -73,7 +83,6 @@ export class AuthController {
   }
 
   @Patch('updateUserData')
-  // @UseInterceptors(FileInterceptor('file'))
   async editProfile(
     @Body('userId') userId: String,
     @Body('userData') userData,

@@ -6,8 +6,6 @@
 /* eslint-disable @typescript-eslint/no-var-requires */
 import {
   BadRequestException,
-  HttpException,
-  HttpStatus,
   Injectable,
   InternalServerErrorException,
   NotFoundException,

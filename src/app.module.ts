@@ -7,7 +7,6 @@ import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AnalysisModule } from './analysis/analysis.module';
-
 require('dotenv').config({ path: './.env' });
 
 @Module({

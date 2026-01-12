@@ -10,12 +10,14 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import * as AWS from 'aws-sdk';
 import { InjectModel } from '@nestjs/mongoose';
 import { Document, Model, Types } from 'mongoose';
 import { Auth } from './auth.schema';
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 import { MailerService } from '@nestjs-modules/mailer';
+import { envConfig } from 'src/config/env.config';
 
 @Injectable()
 export class AuthService {
@@ -79,9 +81,7 @@ export class AuthService {
 
   async forgetPassword(email: string) {
     let result = await this.authModel.findOne({ email });
-    console.log('email----', result);
     if (Object.keys(result).length == 0) {
-      console.log('Invalid Email');
       throw new NotFoundException('Invalid Email');
     }
 
@@ -438,11 +438,8 @@ export class AuthService {
 
   /*************************** Update Password ***************************/
   async updatePassword(email: string, newPassword: string) {
-    console.log('params', email, newPassword);
     let user = await this.authModel.findOne({ email });
-    console.log(user);
     if (user) {
-      // let passwordMatched = await bcrypt.compareSync(password, user.hash);
       let hashedPassword = await bcrypt.hashSync(newPassword, 8);
 
       await this.authModel.findOneAndUpdate(
@@ -461,46 +458,10 @@ export class AuthService {
     }
   }
 
-  // async updatePassword(email, password, newPassword) {
-  //   console.log('params', email, password, newPassword);
-  //   let user = await this.authModel.findOne({ email });
-  //   console.log(user);
-  //   if (user) {
-  //     let passwordMatched = await bcrypt.compareSync(password, user.hash);
-  //     let hashedPassword = await bcrypt.hashSync(newPassword, 8);
-
-  //     if (passwordMatched) {
-  //       await this.authModel.findOneAndUpdate(
-  //         { email },
-  //         { hash: hashedPassword },
-  //       );
-  //       throw new HttpException(
-  //         {
-  //           status: HttpStatus.OK,
-  //           msg: 'Password Changed Successfully',
-  //         },
-  //         HttpStatus.OK,
-  //       );
-  //     } else {
-  //       throw new HttpException(
-  //         {
-  //           status: HttpStatus.BAD_REQUEST,
-  //           error: 'Incorrect password',
-  //         },
-  //         HttpStatus.BAD_REQUEST,
-  //       );
-  //     }
-  //   } else {
-  //     throw new NotFoundException('user not found');
-  //   }
-  // }
   /*************************************** reset password ****************************************************/
   async resetPassword(email: string, pass: string) {
-    console.log('email', email, pass);
     const userExist = await this.authModel.findOne({ email }).exec();
-    console.log('userExist', userExist);
     if (!userExist) {
-      console.log('not exist');
       throw new NotFoundException('User Does not Exist');
     }
 
@@ -525,7 +486,6 @@ export class AuthService {
 
   /*************************************** edit profile****************************************************/
   async editProfile(userId: String, userData: { password: any }) {
-    console.log(userId, userData);
     let updatedUser: Document<unknown, any, Auth> &
       Auth & { _id: Types.ObjectId; _doc: any };
     let response: Document<unknown, any, Auth> & Auth & { _id: Types.ObjectId };
@@ -534,7 +494,7 @@ export class AuthService {
     } catch (err) {
       throw new NotFoundException('User does not exist');
     }
-    console.log('updatedUser', updatedUser);
+
     const newUser = {
       ...updatedUser._doc,
       ...userData,
@@ -545,7 +505,7 @@ export class AuthService {
     }
 
     try {
-      response = await await this.authModel.findByIdAndUpdate(userId, newUser, {
+      response = await this.authModel.findByIdAndUpdate(userId, newUser, {
         new: true,
         upsert: true,
         setDefaultsOnInsert: true,
@@ -554,11 +514,9 @@ export class AuthService {
       throw new NotFoundException('User not Found');
     }
 
-    console.log('response', response);
     const user = {
       userExist: response,
     };
-    console.log('user', user);
 
     return user;
   }
@@ -593,5 +551,44 @@ export class AuthService {
     } else {
       throw new BadRequestException('Invalid user id');
     }
+  }
+
+  async updateProfileImage(userId: string, file: Express.Multer.File) {
+    if (!file) {
+      throw new BadRequestException('File is required');
+    }
+
+    const user = await this.authModel.findById(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    // If using AWS S3 or DigitalOcean Spaces
+    const s3 = new AWS.S3({
+      accessKeyId: envConfig.aws.aws_access_key_id,
+      secretAccessKey: envConfig.aws.aws_secret_access_key,
+      endpoint: envConfig.aws.AWS_ENDPOINT,
+      region: envConfig.aws.aws_region,
+      s3ForcePathStyle: true,
+      signatureVersion: 'v4',
+    });
+
+    const uploadResult = await s3
+      .upload({
+        Bucket: `${envConfig.aws.aws_bucket_name}/User_${user._id}`,
+        Key: `profile_${Date.now()}_${file.originalname}`,
+        Body: file.buffer,
+        ACL: 'public-read',
+        ContentType: file.mimetype,
+      })
+      .promise();
+
+    user.avatarUrl = uploadResult.Location;
+    await user.save();
+
+    return {
+      message: 'Profile image updated successfully',
+      avatarUrl: user.avatarUrl,
+    };
   }
 }
