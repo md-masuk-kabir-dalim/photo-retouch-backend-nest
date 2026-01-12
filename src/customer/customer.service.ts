@@ -2,8 +2,6 @@
 /* eslint-disable prefer-const */
 import {
   BadRequestException,
-  HttpException,
-  HttpStatus,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';

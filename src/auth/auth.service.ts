@@ -17,7 +17,7 @@ import { Auth } from './auth.schema';
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 import { MailerService } from '@nestjs-modules/mailer';
-import { envConfig } from 'src/config/env.config';
+import { envConfig } from '../config/env.config';
 
 @Injectable()
 export class AuthService {

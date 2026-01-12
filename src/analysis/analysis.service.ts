@@ -16,7 +16,7 @@ import { Analysis } from './analysis.schema';
 import axios from 'axios';
 import * as AWS from 'aws-sdk';
 import { Auth } from 'src/auth/auth.schema';
-import { envConfig } from 'src/config/env.config';
+import { envConfig } from '../config/env.config';
 var FormData = require('form-data');
 const Pusher = require('pusher');
 

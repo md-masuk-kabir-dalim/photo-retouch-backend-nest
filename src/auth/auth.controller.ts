@@ -13,12 +13,9 @@ import {
   Req,
   UseInterceptors,
   UploadedFile,
-  UploadedFiles,
 } from '@nestjs/common';
-import { Auth } from './auth.schema';
 import { AuthService } from './auth.service';
 import { Request } from 'express';
-// import { AnyFilesInterceptor } from '@nestjs/platform-express';
 import { FileInterceptor } from '@nestjs/platform-express';
 
 @Controller('auth')
@@ -27,7 +24,6 @@ export class AuthController {
 
   @Post('signup')
   async signup(@Req() request: Request) {
-    // console.log('request', request.body);
     const result = await this.authService.signup(request.body);
     return result;
   }

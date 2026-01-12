@@ -20,7 +20,6 @@ export class CustomerController {
 
   @Post()
   async createCustomer(@Req() req: Request) {
-    console.log('req.body', req.body);
     return await this.customerService.createCustomer(req.body);
   }
 
